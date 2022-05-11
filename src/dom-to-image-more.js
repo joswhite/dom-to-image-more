@@ -939,6 +939,7 @@
             defaultStyle[name] =
               (name === 'width' || name === 'height') ? 'auto' : defaultComputedStyle.getPropertyValue(name);
         });
+        sandbox.contentWindow.document.body.removeChild(defaultElement);
         tagNameDefaultStyles[tagName] = defaultStyle;
         return defaultStyle;
     }
