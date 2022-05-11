@@ -945,9 +945,10 @@
     }
 
     function removeSandbox() {
-        if (sandbox) {
-            document.body.removeChild(sandbox);
+        if (!sandbox) {
+            return;
         }
+        document.body.removeChild(sandbox);
         sandbox = null;
         if (removeDefaultStylesTimeoutId) {
             clearTimeout(removeDefaultStylesTimeoutId);
