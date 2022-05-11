@@ -207,7 +207,7 @@
                     ctx.scale(scale, scale);
                     ctx.drawImage(image, 0, 0);
                 }
-                scheduleRemoveSandbox();
+                removeSandbox();
                 return canvas;
             });
 
@@ -226,7 +226,7 @@
         }
     }
 
-    function cloneNode(node, filter, root, vector) {
+    function cloneNode(node, filter, root, vector, parentComputedStyles = null) {
         if (!root && filter && !filter(node)) return Promise.resolve();
 
         return Promise.resolve(node)
@@ -259,11 +259,12 @@
                 });
 
             function cloneChildrenInOrder(parent, childs) {
+                var computedStyles = getComputedStyle(original);
                 var done = Promise.resolve();
                 childs.forEach(function(child) {
                     done = done
                         .then(function() {
-                            return cloneNode(child, filter, false, vector);
+                            return cloneNode(child, filter, false, vector, computedStyles);
                         })
                         .then(function(childClone) {
                             if (childClone) parent.appendChild(childClone);
@@ -314,7 +315,7 @@
                         if (vector) {
                             copyUserComputedStyle(sourceElement, sourceComputedStyles, targetElement, root);
                         } else {
-                            copyUserComputedStyleFast(sourceComputedStyles, targetElement);
+                            copyUserComputedStyleFast(sourceComputedStyles, parentComputedStyles, targetElement);
                         }
 
                         // Remove positioning of root elements, which stops them from being captured correctly
@@ -892,19 +893,22 @@
         }
     }
 
-    function copyUserComputedStyleFast(sourceComputedStyles, targetElement) {
+    function copyUserComputedStyleFast(sourceComputedStyles, parentComputedStyles, targetElement) {
         var defaultStyle = getDefaultStyle(targetElement.tagName);
         var targetStyle = targetElement.style;
 
         util.asArray(sourceComputedStyles).forEach(function(name) {
             var sourceValue = sourceComputedStyles.getPropertyValue(name);
-            if (sourceValue !== defaultStyle[name]) {
+            // If the style does not match the default, or it does not match the parent's, set it. We don't know which
+            // styles are inherited from the parent and which aren't, so we have to always check both.
+            if (sourceValue !== defaultStyle[name] ||
+              (parentComputedStyles && sourceValue !== parentComputedStyles.getPropertyValue(name))) {
                 targetStyle.setProperty(name, sourceValue, sourceComputedStyles.getPropertyPriority(name));
             }
         });
     }
 
-    var removeSandboxTimeoutId = null;
+    var removeDefaultStylesTimeoutId = null;
     var sandbox = null;
     var tagNameDefaultStyles = {};
 
@@ -913,8 +917,12 @@
             return tagNameDefaultStyles[tagName];
         }
         if (!sandbox) {
+            // Create a hidden sandbox <iframe> element within we can create default HTML elements and query their
+            // computed styles. Elements must be rendered in order to query their computed styles. The <iframe> won't
+            // render at all with `display: none`, so we have to use `visibility: hidden` with `position: fixed`.
             sandbox = document.createElement('iframe');
             sandbox.style.visibility = 'hidden';
+            sandbox.style.position = 'fixed';
             document.body.appendChild(sandbox);
             // Ensure that the iframe is rendered in standard mode
             sandbox.contentWindow.document.write('<!DOCTYPE html><meta charset="UTF-8"><title>sandbox</title><body>');
@@ -939,16 +947,14 @@
         if (sandbox) {
             document.body.removeChild(sandbox);
         }
-        removeSandboxTimeoutId = null;
         sandbox = null;
-        tagNameDefaultStyles = {};
-    }
-
-    function scheduleRemoveSandbox() {
-        if (removeSandboxTimeoutId) {
-            clearTimeout(removeSandboxTimeoutId);
+        if (removeDefaultStylesTimeoutId) {
+            clearTimeout(removeDefaultStylesTimeoutId);
         }
-        removeSandboxTimeoutId = setTimeout(removeSandbox, 20*1000);
+        removeDefaultStylesTimeoutId = setTimeout(() => {
+            removeDefaultStylesTimeoutId = null;
+            tagNameDefaultStyles = {};
+        }, 20*1000);
     }
 
 })(this);
